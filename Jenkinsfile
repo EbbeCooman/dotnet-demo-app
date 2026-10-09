@@ -9,24 +9,26 @@ pipeline {
         }
         stage('Build and Deploy') {
             steps {
-                sh 'docker compose up -d --build'
+                sh '''
+                    docker compose up -d --build
+
+                    until docker exec todoappdb mariadb-admin ping -h localhost -uroot -psekrit --silent; do
+                        sleep 2
+                    done
+
+                    docker exec -i todoappdb mariadb -utodo_usr -pletmeinplz todo_db < TodoApp/schema.sql
+
+                    docker restart todoapp
+                '''
             }
         }
         stage('Acceptance Test') {
             steps {
                 sh '''
-                    echo "Wachten tot database en webapp klaar zijn..."
-                    sleep 20
-                    
+                    sleep 10
                     HTTP_STATUS=$(docker run --rm --network dotnetdemopipeline_default curlimages/curl:latest -s -o /dev/null -w "%{http_code}" http://todoapp:8080/ || echo "000")
                     echo "HTTP status: $HTTP_STATUS"
-                    
-                    if [ "$HTTP_STATUS" -eq 200 ]; then
-                        echo "Succes! De app draait en de database is geladen."
-                        exit 0
-                    else
-                        exit 1
-                    fi
+                    [ "$HTTP_STATUS" -eq 200 ]
                 '''
             }
         }
